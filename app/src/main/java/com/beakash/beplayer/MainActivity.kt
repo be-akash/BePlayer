@@ -10,28 +10,46 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.room.Room
+import com.beakash.beplayer.data.local.BePlayerDatabase
 import com.beakash.beplayer.data.media.MediaStoreVideoLoader
 import com.beakash.beplayer.player.PlayerManager
+import com.beakash.beplayer.repository.PlaybackProgressRepository
 import com.beakash.beplayer.ui.screen.PermissionScreen
 import com.beakash.beplayer.ui.screen.PlayerScreen
 import com.beakash.beplayer.ui.screen.VideoLibraryScreen
 import com.beakash.beplayer.ui.theme.BePlayerTheme
 import com.beakash.beplayer.viewmodel.PlayerViewModel
+import com.beakash.beplayer.viewmodel.PlayerViewModelFactory
 import com.beakash.beplayer.viewmodel.VideoLibraryViewModel
 import com.beakash.beplayer.viewmodel.VideoLibraryViewModelFactory
 
 class MainActivity : ComponentActivity() {
 
-    private val playerViewModel: PlayerViewModel by viewModels()
+    private val database by lazy {
+        Room.databaseBuilder(
+            applicationContext,
+            BePlayerDatabase::class.java,
+            "beplayer.db"
+        ).build()
+    }
+
+    private val playbackRepository by lazy {
+        PlaybackProgressRepository(database.playbackPositionDao())
+    }
+
+    private val playerViewModel: PlayerViewModel by viewModels {
+        PlayerViewModelFactory(playbackRepository)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,8 +62,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             BePlayerTheme {
                 val playerManager = remember { PlayerManager(this) }
-                val selectedVideoUri by playerViewModel.selectedVideoUri.collectAsState()
-                val errorMessage by playerViewModel.errorMessage.collectAsState()
+
+                val playerUiState by playerViewModel.uiState.collectAsState()
 
                 val videoLibraryViewModel: VideoLibraryViewModel = viewModel(factory = factory)
                 val videos by videoLibraryViewModel.videos.collectAsState()
@@ -80,7 +98,7 @@ class MainActivity : ComponentActivity() {
                             it,
                             Intent.FLAG_GRANT_READ_URI_PERMISSION
                         )
-                        playerViewModel.setSelectedVideo(it)
+                        playerViewModel.openVideo(it)
                     }
                 }
 
@@ -88,22 +106,37 @@ class MainActivity : ComponentActivity() {
                     if (hasVideoPermission) {
                         videoLibraryViewModel.loadVideos()
                     }
+
                     onDispose {
                         playerManager.release()
                     }
                 }
 
                 when {
-                    selectedVideoUri != null -> {
+                    playerUiState.selectedVideoUri != null -> {
                         PlayerScreen(
-                            videoUri = selectedVideoUri!!,
+                            videoUri = playerUiState.selectedVideoUri!!,
                             playerManager = playerManager,
-                            onPickAnotherVideo = {
-                                playerViewModel.clearSelectedVideo()
+                            resumePositionMs = playerUiState.resumePositionMs,
+                            showResumePrompt = playerUiState.showResumePrompt,
+                            playbackSpeed = playerUiState.playbackSpeed,
+                            onSetPlaybackSpeed = { speed ->
+                                playerViewModel.setPlaybackSpeed(speed)
                             },
-                            onPlaybackError = { message ->
-                                playerViewModel.setError(message)
-                                playerViewModel.clearSelectedVideo()
+                            onResumeConfirmed = {
+                                playerViewModel.onResumeConfirmed()
+                            },
+                            onStartOver = {
+                                playerViewModel.onStartOver()
+                            },
+                            onSavePlaybackProgress = { positionMs, durationMs ->
+                                playerViewModel.saveProgress(positionMs, durationMs)
+                            },
+                            onPickAnotherVideo = {
+                                playerViewModel.clearVideo()
+                            },
+                            onPlaybackError = {
+                                playerViewModel.clearVideo()
                             },
                             modifier = Modifier
                         )
@@ -117,7 +150,7 @@ class MainActivity : ComponentActivity() {
                             onPickWithDocumentPicker = {
                                 pickerLauncher.launch(arrayOf("video/*"))
                             },
-                            errorMessage = errorMessage
+                            errorMessage = playerUiState.errorMessage
                         )
                     }
 
@@ -131,7 +164,7 @@ class MainActivity : ComponentActivity() {
                             sortOption = sortOption,
                             onSortOptionChange = videoLibraryViewModel::updateSortOption,
                             onVideoClick = { video ->
-                                playerViewModel.setSelectedVideo(video.contentUri)
+                                playerViewModel.openVideo(video.contentUri)
                             }
                         )
                     }

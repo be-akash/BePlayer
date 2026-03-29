@@ -3,27 +3,46 @@ package com.beakash.beplayer.player
 import android.content.Context
 import android.net.Uri
 import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.ExoPlayer
 
 class PlayerManager(context: Context) {
 
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(context).build()
 
+    private var currentPlaybackSpeed: Float = 1.0f
+
     fun playVideo(
         uri: Uri,
-        onError: (String) -> Unit = {}
+        onError: (String) -> Unit
     ) {
-        exoPlayer.clearMediaItems()
-        exoPlayer.setMediaItem(MediaItem.fromUri(uri))
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
+        try {
+            val mediaItem = MediaItem.fromUri(uri)
+            exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
 
-        exoPlayer.addListener(object : Player.Listener {
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                onError(error.message ?: "Playback error")
-            }
-        })
+            applyPlaybackSpeed()
+        } catch (e: Exception) {
+            onError(e.message ?: "Unknown playback error")
+        }
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        currentPlaybackSpeed = speed
+        applyPlaybackSpeed()
+    }
+
+    fun getPlaybackSpeed(): Float {
+        return currentPlaybackSpeed
+    }
+
+    fun reapplyPlaybackSpeed() {
+        applyPlaybackSpeed()
+    }
+
+    private fun applyPlaybackSpeed() {
+        exoPlayer.playbackParameters = PlaybackParameters(currentPlaybackSpeed, 1.0f)
     }
 
     fun pause() {
@@ -33,4 +52,7 @@ class PlayerManager(context: Context) {
     fun release() {
         exoPlayer.release()
     }
+
+
 }
+
