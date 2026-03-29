@@ -10,19 +10,24 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.beakash.beplayer.data.media.MediaStoreVideoLoader
 import com.beakash.beplayer.player.PlayerManager
+import com.beakash.beplayer.ui.screen.PermissionScreen
 import com.beakash.beplayer.ui.screen.PlayerScreen
 import com.beakash.beplayer.ui.screen.VideoLibraryScreen
 import com.beakash.beplayer.ui.theme.BePlayerTheme
 import com.beakash.beplayer.viewmodel.PlayerViewModel
 import com.beakash.beplayer.viewmodel.VideoLibraryViewModel
 import com.beakash.beplayer.viewmodel.VideoLibraryViewModelFactory
-import com.beakash.beplayer.ui.screen.PermissionScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -46,6 +51,8 @@ class MainActivity : ComponentActivity() {
                 val videos by videoLibraryViewModel.videos.collectAsState()
                 val isLoading by videoLibraryViewModel.isLoading.collectAsState()
                 val libraryError by videoLibraryViewModel.error.collectAsState()
+                val searchQuery by videoLibraryViewModel.searchQuery.collectAsState()
+                val sortOption by videoLibraryViewModel.sortOption.collectAsState()
 
                 var hasVideoPermission by remember {
                     mutableStateOf(
@@ -119,6 +126,10 @@ class MainActivity : ComponentActivity() {
                             videos = videos,
                             isLoading = isLoading,
                             error = libraryError,
+                            searchQuery = searchQuery,
+                            onSearchQueryChange = videoLibraryViewModel::updateSearchQuery,
+                            sortOption = sortOption,
+                            onSortOptionChange = videoLibraryViewModel::updateSortOption,
                             onVideoClick = { video ->
                                 playerViewModel.setSelectedVideo(video.contentUri)
                             }
